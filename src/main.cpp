@@ -8,32 +8,38 @@
 #include <iostream>
 #include <pthread.h>
 #include <semaphore.h>
-#include <algorithm>
 
 #define NUM_PLANES 8
 #define PLANE_PASSENGER_CAPACITY 10
 
 int airport_passengers = 0;
 int scheduled_tours = 0;
-
-// Completed trips per plane.
-int completed_trips[NUM_PLANES];
+int completed_tours = 0;
+int in_process = 0;
 
 // Boarding and runway semaphores.
 sem_t board_sem, runway_sem;
 
 void *airplane_process(void *pthread_id) {
   int plane_id = *(int *)pthread_id;
-  completed_trips[plane_id] = 0;
 
-  while (completed_trips[plane_id] < scheduled_tours) {
+  // How many threads are currently running.
+  ++in_process;
+
+  // Minus 1 to account for this thread.
+  while (completed_tours + in_process - 1 < scheduled_tours) {
 
     // Board passengers.
     int boarded_passengers = 0;
-    while (boarded_passengers < PLANE_PASSENGER_CAPACITY && airport_passengers > 0) {
+    AirportAnimator::updateStatus(plane_id, "BOARD");
+    while (boarded_passengers < PLANE_PASSENGER_CAPACITY) {
       sem_wait(&board_sem);
-      ++boarded_passengers;
-      --airport_passengers;
+
+      // Only board a passenger if there's one available in the airport.
+      if (airport_passengers > 0) {
+	++boarded_passengers;
+	--airport_passengers;
+      }
       AirportAnimator::updatePassengers(plane_id, boarded_passengers);
       sem_post(&board_sem);
       sleep(rand() % 3);
@@ -43,7 +49,7 @@ void *airplane_process(void *pthread_id) {
     AirportAnimator::updateStatus(plane_id, "TAXI");
     AirportAnimator::taxiOut(plane_id);
     
-    // Take off.
+    // Tour.
     sem_wait(&runway_sem);
     AirportAnimator::updateStatus(plane_id, "TKOFF");
     AirportAnimator::takeoff(plane_id);
@@ -64,20 +70,21 @@ void *airplane_process(void *pthread_id) {
     AirportAnimator::taxiIn(plane_id);
 
     // Release passengers.
+    AirportAnimator::updateStatus(plane_id, "DEPLN");
     while (boarded_passengers > 0) {
       sem_wait(&board_sem);
       --boarded_passengers;
       ++airport_passengers;
       AirportAnimator::updatePassengers(plane_id, boarded_passengers);
       sem_post(&board_sem);
-      sleep(rand() % 3);
+      sleep(1);
     }
 
-    // Increment this plane's completed trips by 1.
-    // Update completed tours to be the minimum of all planes' completed trips.
-    ++completed_trips[plane_id];
-    AirportAnimator::updateTours(*std::min_element(completed_trips, completed_trips + NUM_PLANES));
+    ++completed_tours;
+    AirportAnimator::updateTours(completed_tours);
   }
+  --in_process;
+  AirportAnimator::updateStatus(plane_id, "DONE");
   return pthread_id;
 }
 
