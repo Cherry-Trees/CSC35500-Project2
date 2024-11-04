@@ -43,7 +43,7 @@ void *airplane_process(void *pthread_id) {
     AirportAnimator::updateStatus(plane_id, "TAXI");
     AirportAnimator::taxiOut(plane_id);
     
-    // Tour.
+    // Take off.
     sem_wait(&runway_sem);
     AirportAnimator::updateStatus(plane_id, "TKOFF");
     AirportAnimator::takeoff(plane_id);
